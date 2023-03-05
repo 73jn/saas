@@ -12,6 +12,12 @@ import aws_cdk as cdk
 # Import lambda_event_sources
 import aws_cdk.aws_lambda_event_sources as lambda_event_sources
 
+from aws_cdk import (
+    aws_iam as iam,
+    aws_lambda as lambda_,
+)
+
+
 class SaasStack(Stack):
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
@@ -25,14 +31,52 @@ class SaasStack(Stack):
         #     visibility_timeout=Duration.seconds(300),
         # )
         
-        func = lambda_.Function(
-            self, "SaasLambda",
-            runtime=lambda_.Runtime.PYTHON_3_7,
-            handler="index.handler",
-            code=lambda_.Code.from_inline("def handler(event, context):\n    print(event)\n"),
+
+        # Create a role for the lambda function
+        lambda_role = iam.Role(
+            self, "LambdaRole",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
         )
+        lambda_role.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+        # Define the IAM policy
+        lambda_policy = iam.Policy(
+            self, "LambdaPolicy",
+            statements=[
+                iam.PolicyStatement(
+                    actions=[
+                        "logs:CreateLogGroup",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents"
+                    ],
+                    resources=["arn:aws:logs:*:*:*"]
+                ),
+                iam.PolicyStatement(
+                    actions=["iot:*"],
+                    resources=["*"]
+                )
+            ]
+        )
+        lambda_policy.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+        # Attach the policy to the role
+        lambda_policy.attach_to_role(lambda_role)
+
+        # Create the lambda function
+        func = lambda_.Function(
+            self, "MyLambdaFunction",
+            runtime=lambda_.Runtime.PYTHON_3_7,
+            code=lambda_.Code.from_inline("def handler(event, context):\n    print(event)\n"),
+            handler="index.handler",
+            role=lambda_role
+        )
+
+
         func.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
-        # IoT
+
+
+
+        # Créer la règle de sujet IoT pour déclencher la fonction lambda
         iot_topic_rule = iot.CfnTopicRule(
             self, "SaasIotTopicRule",
             rule_name="SaasIotTopicRule",
@@ -40,7 +84,7 @@ class SaasStack(Stack):
                 actions=[
                     iot.CfnTopicRule.ActionProperty(
                         lambda_=iot.CfnTopicRule.LambdaActionProperty(
-                            function_arn=func.function_arn
+                            function_arn=func.latest_version.function_arn
                         )
                     )
                 ],
@@ -49,7 +93,6 @@ class SaasStack(Stack):
         )
 
         iot_topic_rule.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
-
 
 
 
