@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@aws-cdk/aws-iot": "^1.195.0"
+  }
+}

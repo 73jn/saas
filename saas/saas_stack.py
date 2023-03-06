@@ -16,6 +16,8 @@ from aws_cdk import (
     aws_iam as iam,
     aws_lambda as lambda_,
 )
+import aws_cdk.aws_iot_actions_alpha as actions
+
 
 
 class SaasStack(Stack):
@@ -84,15 +86,28 @@ class SaasStack(Stack):
                 actions=[
                     iot.CfnTopicRule.ActionProperty(
                         lambda_=iot.CfnTopicRule.LambdaActionProperty(
-                            function_arn=func.latest_version.function_arn
+                            function_arn=func.function_arn
                         )
                     )
                 ],
                 sql="SELECT * FROM 'saas/iot'",
-            )
+                rule_disabled=False
+            ),
         )
 
         iot_topic_rule.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+        # OH MY GOD 10 HOURS OF MY LIFE
+        # https://github.com/aws/aws-cdk/issues/16339
+        cfn_permission = lambda_.CfnPermission(
+            self, "LambdaPermission",
+            action="lambda:InvokeFunction",
+            function_name=func.function_name,
+            principal="iot.amazonaws.com",
+            source_arn=iot_topic_rule.attr_arn
+        )
+        cfn_permission.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
 
 
 
