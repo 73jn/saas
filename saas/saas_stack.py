@@ -127,15 +127,7 @@ class SaasStack(Stack):
                     {
                         "Effect": "Allow",
                         "Action": [
-                            "iot:Publish",
-                            "iot:Receive",
-                            "iot:Subscribe",
-                            "iot:Connect",
-                            "iot:UpdateThingShadow",
-                            "iot:GetThingShadow",
-                            "iot:DeleteThingShadow",
-                            "iot:CreateThingGroup",
-                            "iot:DeleteThingGroup",
+                            "*"
                         ],
                         "Resource": [
                             # Allow to publish and receive to all topics
@@ -200,3 +192,82 @@ class SaasStack(Stack):
         iot_thing_group.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
 
 
+
+
+
+
+        # Provisioning template
+        # CfnProvisioningTemplate
+        # {
+        #   "Parameters": {
+        #     "SerialNumber": {
+        #       "Type": "String"
+        #     },
+        #     "AWS::IoT::Certificate::Id": {
+        #       "Type": "String"
+        #     }
+        #   },
+        #   "Resources": {
+        #     "policy_SaasIotPolicy": {
+        #       "Type": "AWS::IoT::Policy",
+        #       "Properties": {
+        #         "PolicyName": "SaasIotPolicy"
+        #       }
+        #     },
+        #     "certificate": {
+        #       "Type": "AWS::IoT::Certificate",
+        #       "Properties": {
+        #         "CertificateId": {
+        #           "Ref": "AWS::IoT::Certificate::Id"
+        #         },
+        #         "Status": "Active"
+        #       }
+        #     },
+        #     "thing": {
+        #       "Type": "AWS::IoT::Thing",
+        #       "OverrideSettings": {
+        #         "AttributePayload": "MERGE",
+        #         "ThingGroups": "DO_NOTHING",
+        #         "ThingTypeName": "REPLACE"
+        #       },
+        #       "Properties": {
+        #         "AttributePayload": {},
+        #         "ThingGroups": [
+        #           "fleet-group"
+        #         ],
+        #         "ThingName": {
+        #           "Fn::Join": [
+        #             "",
+        #             [
+        #               "",
+        #               {
+        #                 "Ref": "SerialNumber"
+        #               }
+        #             ]
+        #           ]
+        #         }
+        #       }
+        #     }
+        #   }
+        # }
+        # Import json template
+        template_body = open("saas/iot_provisioning_template.json", "r").read()
+
+        # Provision role for the template
+        iot_provioning_role = iam.Role(
+            self, "SaasIotProvisioningRole",
+            assumed_by=iam.ServicePrincipal("iot.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSIoTThingsRegistration"),
+                iam.ManagedPolicy.from_aws_managed_policy_name("AWSIoTFullAccess"),
+            ]
+        )
+        iot_provioning_role.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+        # Create the template
+        iot_provioning_template = iot.CfnProvisioningTemplate(
+            self, "SaasIotProvisioningTemplate",
+            provisioning_role_arn = iot_provioning_role.role_arn,
+            template_body=template_body,
+            template_name="SaasIotProvisioningTemplate",
+        )
