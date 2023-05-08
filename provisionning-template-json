@@ -1,0 +1,52 @@
+{
+  "Parameters": {
+    "SerialNumber": {
+      "Type": "String"
+    },
+    "AWS::IoT::Certificate::Id": {
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "policy_SaasIotPolicy": {
+      "Type": "AWS::IoT::Policy",
+      "Properties": {
+        "PolicyName": "SaasIotPolicy"
+      }
+    },
+    "certificate": {
+      "Type": "AWS::IoT::Certificate",
+      "Properties": {
+        "CertificateId": {
+          "Ref": "AWS::IoT::Certificate::Id"
+        },
+        "Status": "Active"
+      }
+    },
+    "thing": {
+      "Type": "AWS::IoT::Thing",
+      "OverrideSettings": {
+        "AttributePayload": "MERGE",
+        "ThingGroups": "DO_NOTHING",
+        "ThingTypeName": "REPLACE"
+      },
+      "Properties": {
+        "AttributePayload": {},
+        "ThingGroups": [
+          "fleet-group"
+        ],
+        "ThingName": {
+          "Fn::Join": [
+            "",
+            [
+              "",
+              {
+                "Ref": "SerialNumber"
+              }
+            ]
+          ]
+        }
+      }
+    }
+  }
+}

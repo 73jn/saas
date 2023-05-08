@@ -8,7 +8,7 @@ from constructs import Construct
 import aws_cdk.aws_iot as iot
 import aws_cdk.aws_lambda as lambda_
 import aws_cdk as cdk
-
+from aws_cdk import aws_cloudformation as cfn
 # Import lambda_event_sources
 import aws_cdk.aws_lambda_event_sources as lambda_event_sources
 
@@ -16,7 +16,12 @@ from aws_cdk import (
     aws_iam as iam,
     aws_lambda as lambda_,
 )
-import aws_cdk.aws_iot_actions_alpha as actions
+import aws_cdk.aws_s3 as s3
+import aws_cdk.aws_s3_assets as s3_assets
+
+# Import pyOpenSSL
+import OpenSSL
+import json
 
 
 
@@ -139,3 +144,54 @@ class SaasStack(Stack):
             policy_name="SaasIotPolicy"
         )
         iot_policy.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+
+        # Bulk registration
+        # Create an S3 bucket containing the json with the devices name and the serial number and the CSR
+        # bucket = s3.Bucket(
+        #     self, "SaasBucket",
+        #     removal_policy=cdk.RemovalPolicy.DESTROY
+        # )
+
+        # # Fill the bucket with the json file
+        # s3_assets.Asset(
+        #     self, "SaasAsset",
+        #     path="saas/asset.json",
+        #     bucket=bucket,
+
+        # )
+
+
+        
+        iot_thing_group_lambda = lambda_.Function(
+            self,
+            "IotThingGroupLambda",
+            code=lambda_.Code.from_asset("saas/iot_thing_group"),
+            handler="index.lambda_handler",
+            runtime=lambda_.Runtime.PYTHON_3_8,
+
+            # Add the policy to the role
+            role=lambda_role,
+
+        )
+
+        thing_group_name = "MyIotThingGroup"
+        iot_thing_group = cfn.CfnCustomResource(
+            self,
+            "IotThingGroup",
+            service_token=iot_thing_group_lambda.function_arn,
+        )
+        iot_thing_group.add_override("Properties.ThingGroupName", thing_group_name)
+
+
+        # Add the policy to the custom resource to allow trigger the lambda function
+        iot_thing_group_cfn_permission = lambda_.CfnPermission(
+            self, "IotThingGroupPermission",
+            action="lambda:InvokeFunction",
+            function_name=iot_thing_group_lambda.function_name,
+            principal="custom-resource.amazonaws.com",
+            source_arn=iot_thing_group.get_att(attribute_name="Arn").to_string()
+        )
+        iot_thing_group.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+
