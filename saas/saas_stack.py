@@ -59,7 +59,9 @@ class SaasStack(Stack):
                     resources=["arn:aws:logs:*:*:*"]
                 ),
                 iam.PolicyStatement(
-                    actions=["iot:*"],
+                    actions=["iot:*",
+                            "iot:CreateThingGroup",
+                            "iot:DeleteThingGroup",],
                     resources=["*"]
                 )
             ]
@@ -118,7 +120,7 @@ class SaasStack(Stack):
 
         # Create policy certificate iot
         iot_policy = iot.CfnPolicy(
-            self, "SaasIotPolicy",
+            self, "SaasIotPolicy12",
             policy_document={
                 "Version": "2012-10-17",
                 "Statement": [
@@ -131,8 +133,9 @@ class SaasStack(Stack):
                             "iot:Connect",
                             "iot:UpdateThingShadow",
                             "iot:GetThingShadow",
-                            "iot:DeleteThingShadow"
-                
+                            "iot:DeleteThingShadow",
+                            "iot:CreateThingGroup",
+                            "iot:DeleteThingGroup",
                         ],
                         "Resource": [
                             # Allow to publish and receive to all topics
@@ -141,7 +144,7 @@ class SaasStack(Stack):
                     }
                 ]
             },
-            policy_name="SaasIotPolicy"
+            policy_name="SaasIotPolicy12"
         )
         iot_policy.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
 
@@ -172,8 +175,10 @@ class SaasStack(Stack):
 
             # Add the policy to the role
             role=lambda_role,
-
         )
+        iot_thing_group_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+        
+
 
         thing_group_name = "MyIotThingGroup"
         iot_thing_group = cfn.CfnCustomResource(
@@ -189,7 +194,7 @@ class SaasStack(Stack):
             self, "IotThingGroupPermission",
             action="lambda:InvokeFunction",
             function_name=iot_thing_group_lambda.function_name,
-            principal="custom-resource.amazonaws.com",
+            principal="cloudformation.amazonaws.com",  # Change this to cloudformation.amazonaws.com
             source_arn=iot_thing_group.get_att(attribute_name="Arn").to_string()
         )
         iot_thing_group.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
