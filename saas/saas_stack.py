@@ -101,7 +101,6 @@ class SaasStack(Stack):
                 rule_disabled=False
             ),
         )
-
         iot_topic_rule.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
 
         # OH MY GOD 10 HOURS OF MY LIFE
@@ -197,59 +196,6 @@ class SaasStack(Stack):
 
 
         # Provisioning template
-        # CfnProvisioningTemplate
-        # {
-        #   "Parameters": {
-        #     "SerialNumber": {
-        #       "Type": "String"
-        #     },
-        #     "AWS::IoT::Certificate::Id": {
-        #       "Type": "String"
-        #     }
-        #   },
-        #   "Resources": {
-        #     "policy_SaasIotPolicy": {
-        #       "Type": "AWS::IoT::Policy",
-        #       "Properties": {
-        #         "PolicyName": "SaasIotPolicy"
-        #       }
-        #     },
-        #     "certificate": {
-        #       "Type": "AWS::IoT::Certificate",
-        #       "Properties": {
-        #         "CertificateId": {
-        #           "Ref": "AWS::IoT::Certificate::Id"
-        #         },
-        #         "Status": "Active"
-        #       }
-        #     },
-        #     "thing": {
-        #       "Type": "AWS::IoT::Thing",
-        #       "OverrideSettings": {
-        #         "AttributePayload": "MERGE",
-        #         "ThingGroups": "DO_NOTHING",
-        #         "ThingTypeName": "REPLACE"
-        #       },
-        #       "Properties": {
-        #         "AttributePayload": {},
-        #         "ThingGroups": [
-        #           "fleet-group"
-        #         ],
-        #         "ThingName": {
-        #           "Fn::Join": [
-        #             "",
-        #             [
-        #               "",
-        #               {
-        #                 "Ref": "SerialNumber"
-        #               }
-        #             ]
-        #           ]
-        #         }
-        #       }
-        #     }
-        #   }
-        # }
         # Import json template
         template_body = open("saas/iot_provisioning_template.json", "r").read()
 
@@ -264,10 +210,41 @@ class SaasStack(Stack):
         )
         iot_provioning_role.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
 
+        # Pre-provisioning hook lambda
+        iot_provioning_pre_provisioning_hook_lambda = lambda_.Function(
+            self,
+            "IotProvisioningPreProvisioningHookLambda",
+            code=lambda_.Code.from_asset("saas/iot_provisioning_pre_provisioning_hook"),
+            handler="index.lambda_handler",
+            runtime=lambda_.Runtime.PYTHON_3_8,
+
+            # Add the policy to the role
+            role=lambda_role,
+        )
+        iot_provioning_pre_provisioning_hook_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+
+
         # Create the template
         iot_provioning_template = iot.CfnProvisioningTemplate(
             self, "SaasIotProvisioningTemplate",
             provisioning_role_arn = iot_provioning_role.role_arn,
             template_body=template_body,
             template_name="SaasIotProvisioningTemplate",
+            enabled=True,
+            pre_provisioning_hook=iot.CfnProvisioningTemplate.ProvisioningHookProperty(
+                target_arn=iot_provioning_pre_provisioning_hook_lambda.function_arn
+            )
+            
         )
+        iot_provioning_template.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+
+        # Permit the lambda to call the iot api
+        permission_hook_pre_provisionning = lambda_.CfnPermission(
+            self, "LambdaPermissionPreProvisioningHook",
+            action="lambda:InvokeFunction",
+            function_name=iot_provioning_pre_provisioning_hook_lambda.function_name,
+            principal="iot.amazonaws.com",
+        )
+        permission_hook_pre_provisionning.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
