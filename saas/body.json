@@ -1,59 +1,43 @@
 {
-    "Parameters":{
-       "AWS::IoT::Certificate::CommonName":{
-          "Type":"String"
+   "Parameters": {
+     "AWS::IoT::Certificate::CommonName": {
+       "Type": "String"
+     },
+     "AWS::IoT::Certificate::Id": {
+       "Type": "String"
+     }
+   },
+   "Resources": {
+     "thing": {
+       "Type": "AWS::IoT::Thing",
+       "Properties": {
+         "ThingName": {
+           "Ref": "AWS::IoT::Certificate::CommonName"
+         },
+         "ThingGroups": [
+           "MyIotThingGroup"
+         ]
        },
-       "AWS::IoT::Certificate::SerialNumber":{
-          "Type":"String"
-       },
-       "AWS::IoT::Certificate::Country":{
-          "Type":"String"
-       },
-       "AWS::IoT::Certificate::Id":{
-          "Type":"String"
+       "OverrideSettings": {
+         "AttributePayload": "MERGE",
+         "ThingTypeName": "REPLACE",
+         "ThingGroups": "DO_NOTHING"
        }
-    },
-    "Resources":{
-       "thing":{
-          "Type":"AWS::IoT::Thing",
-          "Properties":{
-             "ThingName":{
-                "Ref":"AWS::IoT::Certificate::CommonName"
-             },
-             "AttributePayload":{
-                "version":"v1",
-                "serialNumber":{
-                   "Ref":"AWS::IoT::Certificate::SerialNumber"
-                }
-             },
-             "ThingGroups":[
-                "MyIotThingGroup",
-                {
-                   "Ref":"AWS::IoT::Certificate::Country"
-                }
-             ]
-          },
-          "OverrideSettings":{
-             "AttributePayload":"MERGE",
-             "ThingTypeName":"REPLACE",
-             "ThingGroups":"DO_NOTHING"
-          }
-       },
-       "certificate":{
-          "Type":"AWS::IoT::Certificate",
-          "Properties":{
-             "CertificateId":{
-                "Ref":"AWS::IoT::Certificate::Id"
-             },
-             "Status":"ACTIVE"
-          }
-       },
-
-       "policy": {
-        "Type": "AWS::IoT::Policy",
-        "Properties": {
-            "PolicyName": "SaasIotPolicy"
-            }
-        }
-    }
+     },
+     "certificate": {
+       "Type": "AWS::IoT::Certificate",
+       "Properties": {
+         "CertificateId": {
+           "Ref": "AWS::IoT::Certificate::Id"
+         },
+         "Status": "ACTIVE"
+       }
+     },
+     "policy": {
+       "Type": "AWS::IoT::Policy",
+       "Properties": {
+         "PolicyName": "SaasIotPolicy"
+       }
+     }
+   }
  }
