@@ -61,7 +61,10 @@ class SaasStack(Stack):
                 iam.PolicyStatement(
                     actions=["iot:*",
                             "iot:CreateThingGroup",
-                            "iot:DeleteThingGroup",],
+                            "iot:DeleteThingGroup",
+                            # Create template provisioning
+                            "iot:CreateProvisioningTemplate",
+                            "iam:PassRole",],
                     resources=["*"]
                 )
             ]
@@ -248,3 +251,31 @@ class SaasStack(Stack):
             principal="iot.amazonaws.com",
         )
         permission_hook_pre_provisionning.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+
+
+        # JITP
+        # Lambda iot_jitp_template
+        iot_jitp_template_lambda = lambda_.Function(
+            self,
+            "IotJitpTemplateLambda",
+            code=lambda_.Code.from_asset("saas/iot_jitp_template"),
+            handler="index.lambda_handler",
+            runtime=lambda_.Runtime.PYTHON_3_8,
+
+            # Add the policy to the role
+            role=lambda_role,
+        )
+        iot_jitp_template_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+        # Create Provisioning template WITH CUSTOM RESOURCE
+        iot_jitp_template = cfn.CfnCustomResource(
+            self,
+            "IotJitpTemplate",
+            service_token=iot_jitp_template_lambda.function_arn,
+        )
+        #iot_jitp_template.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+        iot_jitp_template.add_override("Properties.TemplateName", "SaasIotJitpTemplate")
+        iot_jitp_template.add_override("Properties.ProvisioningRoleArn", iot_provioning_role.role_arn)
+        template_body = open("saas/body.json", "r").read()
+        iot_jitp_template.add_override("Properties.TemplateBody", template_body)
