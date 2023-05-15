@@ -64,7 +64,8 @@ class SaasStack(Stack):
                             "iot:DeleteThingGroup",
                             # Create template provisioning
                             "iot:CreateProvisioningTemplate",
-                            "iam:PassRole",],
+                            "iam:PassRole",
+                            ],
                     resources=["*"]
                 )
             ]
@@ -277,5 +278,34 @@ class SaasStack(Stack):
         #iot_jitp_template.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
         iot_jitp_template.add_override("Properties.TemplateName", "SaasIotJitpTemplate")
         iot_jitp_template.add_override("Properties.ProvisioningRoleArn", iot_provioning_role.role_arn)
-        template_body = open("saas/body.json", "r").read()
         iot_jitp_template.add_override("Properties.TemplateBody", template_body)
+        # iot_jitp_template.add_override("Properties.CaCertificate", ca_certificate)
+
+
+
+        # template_body = open("saas/body.json", "r").read()
+        # # Custom ressource to create the CA certificate
+        # iot_jitp_ca_certificate_lambda = lambda_.Function(
+        #     self,
+        #     "IotJitpCaCertificateLambda",
+        #     code=lambda_.Code.from_asset("saas/iot_ca_cert"),
+        #     handler="index.lambda_handler",
+        #     runtime=lambda_.Runtime.PYTHON_3_8,
+
+        #     # Add the policy to the role
+        #     role=lambda_role,
+        # )
+        # iot_jitp_ca_certificate_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+
+        # # Create the CA certificate
+        # iot_jitp_ca_certificate = cfn.CfnCustomResource(
+        #     self,
+        #     "IotJitpCaCertificate",
+        #     service_token=iot_jitp_ca_certificate_lambda.function_arn,
+        # )
+        # ca_certificate = open("saas/jitp_certs/deviceRootCA.pem", "r").read()
+        # iot_jitp_ca_certificate.add_override("Properties.CACertificate", ca_certificate)
+        # iot_jitp_ca_certificate.add_override("Properties.TemplateName", "SaasIotJitpTemplate")
+        # iot_jitp_ca_certificate.add_override("Properties.ProvisioningRoleArn", iot_provioning_role.role_arn)
+        # iot_jitp_ca_certificate.add_override("Properties.TemplateBody", template_body)

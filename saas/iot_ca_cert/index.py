@@ -29,48 +29,42 @@ def send_response(event, context, response_status, response_data, physical_resou
 def lambda_handler(event, context):
     iot_client = boto3.client("iot")
     template_name = ""
-    response = {}
 
     try:
         if event["RequestType"] == "Create":
-            print("Creating provisioning template")
+
+            ca_certificate = event["ResourceProperties"]["CACertificate"]
             template_name = event["ResourceProperties"]["TemplateName"]
             provisioning_role_arn = event["ResourceProperties"]["ProvisioningRoleArn"]
             template_body = event["ResourceProperties"]["TemplateBody"]
-            # ca_certificate = event["ResourceProperties"]["CaCertificate"]
-            # Print template body
-            print(template_body)
-            print(provisioning_role_arn)
-            print(template_name)
+            # Register CA certificate
+            response = iot_client.register_ca_certificate(
+                caCertificate=ca_certificate,
+                verificationCertificate=ca_certificate,
+                setAsActive=True,
+                allowAutoRegistration=True,
+                registrationConfig={
+                    'templateBody': template_body,
+                    'roleArn': provisioning_role_arn,
+                    "templateName": template_name
+                }
+            )
+        if event["RequestType"] == "Delete":
+            certificate_id = event["PhysicalResourceId"]  # assuming the certificate id is the physical resource id
 
-
-
-            create_response = iot_client.create_provisioning_template(
-            templateName=template_name,
-            templateBody=template_body,
-            enabled=True,
-            provisioningRoleArn=provisioning_role_arn,
-            type='JITP'
+            # Update CA certificate to inactive
+            iot_client.update_ca_certificate(
+                certificateId=certificate_id,
+                newStatus='INACTIVE'
             )
 
-            # # Register CA certificate
-            # response2 = iot_client.register_ca_certificate(
-            #     caCertificate=ca_certificate,
-            #     verificationCertificate=ca_certificate,
-            #     setAsActive=True,
-            #     allowAutoRegistration=True,
-            #     registrationConfig={
-            #         'templateBody': template_body,
-            #         'roleArn': provisioning_role_arn,
-            #         "templateName": template_name
-            #     }
-            # )
+            # Delete CA certificate
+            iot_client.delete_ca_certificate(
+                certificateId=certificate_id
+            )
 
-        if event["RequestType"] == "Delete":
-            template_name = event["ResourceProperties"]["TemplateName"]
-            iot_client.delete_provisioning_template(templateName=template_name)
 
-        response_data = {"Arn": create_response["templateArn"]} if event["RequestType"] == "Create" else {}
+        response_data = {"Arn": response["templateArn"]} if event["RequestType"] == "Create" else {}
         send_response(event, context, "SUCCESS", response_data, template_name)
 
     except Exception as e:
