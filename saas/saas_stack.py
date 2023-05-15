@@ -278,7 +278,8 @@ class SaasStack(Stack):
         #iot_jitp_template.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
         iot_jitp_template.add_override("Properties.TemplateName", "SaasIotJitpTemplate")
         iot_jitp_template.add_override("Properties.ProvisioningRoleArn", iot_provioning_role.role_arn)
-        iot_jitp_template.add_override("Properties.TemplateBody", template_body)
+        jitp_body = open("saas/body.json", "r").read()
+        iot_jitp_template.add_override("Properties.TemplateBody", jitp_body)
         # iot_jitp_template.add_override("Properties.CaCertificate", ca_certificate)
 
 
