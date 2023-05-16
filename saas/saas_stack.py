@@ -65,6 +65,9 @@ class SaasStack(Stack):
                             # Create template provisioning
                             "iot:CreateProvisioningTemplate",
                             "iam:PassRole",
+                            # Publish to dynamodb
+                            "dynamodb:*",
+
                             ],
                     resources=["*"]
                 )
@@ -171,7 +174,8 @@ class SaasStack(Stack):
             # Add the policy to the role
             role=lambda_role,
         )
-        iot_thing_group_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+        # Can be removed before custom ressource
+        # iot_thing_group_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
         
 
 
@@ -182,7 +186,7 @@ class SaasStack(Stack):
             service_token=iot_thing_group_lambda.function_arn,
         )
         iot_thing_group.add_override("Properties.ThingGroupName", thing_group_name)
-
+        iot_thing_group.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
 
         # Add the policy to the custom resource to allow trigger the lambda function
         iot_thing_group_cfn_permission = lambda_.CfnPermission(
@@ -192,16 +196,9 @@ class SaasStack(Stack):
             principal="cloudformation.amazonaws.com",  # Change this to cloudformation.amazonaws.com
             source_arn=iot_thing_group.get_att(attribute_name="Arn").to_string()
         )
-        iot_thing_group.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+        # iot_thing_group_cfn_permission.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+        
 
-
-
-
-
-
-        # Provisioning template
-        # Import json template
-        template_body = open("saas/iot_provisioning_template.json", "r").read()
 
         # Provision role for the template
         iot_provioning_role = iam.Role(
@@ -214,73 +211,175 @@ class SaasStack(Stack):
         )
         iot_provioning_role.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
 
-        # Pre-provisioning hook lambda
-        iot_provioning_pre_provisioning_hook_lambda = lambda_.Function(
-            self,
-            "IotProvisioningPreProvisioningHookLambda",
-            code=lambda_.Code.from_asset("saas/iot_provisioning_pre_provisioning_hook"),
-            handler="index.lambda_handler",
-            runtime=lambda_.Runtime.PYTHON_3_8,
 
-            # Add the policy to the role
-            role=lambda_role,
-        )
-        iot_provioning_pre_provisioning_hook_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+        enable_jitr = False
+        if enable_jitr:
+            # JITR
+            # JITR LAMBDA
+            iot_jitr_lambda = lambda_.Function(
+                self,
+                "IotJitrLambda",
+                code=lambda_.Code.from_asset("saas/iot_jitr"),
+                handler="index.lambda_handler",
+                runtime=lambda_.Runtime.PYTHON_3_8,
 
-
-
-        # Create the template
-        iot_provioning_template = iot.CfnProvisioningTemplate(
-            self, "SaasIotProvisioningTemplate",
-            provisioning_role_arn = iot_provioning_role.role_arn,
-            template_body=template_body,
-            template_name="SaasIotProvisioningTemplate",
-            enabled=True,
-            pre_provisioning_hook=iot.CfnProvisioningTemplate.ProvisioningHookProperty(
-                target_arn=iot_provioning_pre_provisioning_hook_lambda.function_arn
+                # Add environment variables
+                environment={
+                    "IOT_POLICY_NAME" : iot_policy.policy_name,
+                    "THING_GROUP_NAME" : thing_group_name
+                },
+                # Add the policy to the role
+                role=lambda_role,
             )
-            
-        )
-        iot_provioning_template.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
 
 
-        # Permit the lambda to call the iot api
-        permission_hook_pre_provisionning = lambda_.CfnPermission(
-            self, "LambdaPermissionPreProvisioningHook",
-            action="lambda:InvokeFunction",
-            function_name=iot_provioning_pre_provisioning_hook_lambda.function_name,
-            principal="iot.amazonaws.com",
-        )
-        permission_hook_pre_provisionning.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+            # Rule which trigger the lambda function
+            # $aws/events/certificates/registered/#
+            iot_jitr_rule = iot.CfnTopicRule(
+                self, "SaasIotJitrRule",
+                rule_name="SaasIotJitrRule",
+                topic_rule_payload=iot.CfnTopicRule.TopicRulePayloadProperty(
+                    actions=[
+                        iot.CfnTopicRule.ActionProperty(
+                            lambda_=iot.CfnTopicRule.LambdaActionProperty(
+                                function_arn=iot_jitr_lambda.function_arn
+                            )
+                        )
+                    ],
+                    sql="SELECT * FROM '$aws/events/certificates/registered/#'",
+                    rule_disabled=False
+                ),
+            )
+
+
+            # Add the policy to the custom resource to allow trigger the lambda function
+            iot_jitr_cfn_permission = lambda_.CfnPermission(
+                self, "IotJitrPermission",
+                action="lambda:InvokeFunction",
+                function_name=iot_jitr_lambda.function_name,
+                principal="iot.amazonaws.com",
+                source_arn=iot_jitr_rule.attr_arn
+            )
+
+
+        enable_fleet_provisioning = False
+        if enable_fleet_provisioning:
+            # Provisioning template
+            # Import json template
+            template_body = open("saas/iot_provisioning_template.json", "r").read()
 
 
 
-        # JITP
-        # Lambda iot_jitp_template
-        iot_jitp_template_lambda = lambda_.Function(
-            self,
-            "IotJitpTemplateLambda",
-            code=lambda_.Code.from_asset("saas/iot_jitp_template"),
-            handler="index.lambda_handler",
-            runtime=lambda_.Runtime.PYTHON_3_8,
+            # Pre-provisioning hook lambda
+            iot_provioning_pre_provisioning_hook_lambda = lambda_.Function(
+                self,
+                "IotProvisioningPreProvisioningHookLambda",
+                code=lambda_.Code.from_asset("saas/iot_provisioning_pre_provisioning_hook"),
+                handler="index.lambda_handler",
+                runtime=lambda_.Runtime.PYTHON_3_8,
 
-            # Add the policy to the role
-            role=lambda_role,
-        )
-        iot_jitp_template_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+                # Add the policy to the role
+                role=lambda_role,
+            )
+            iot_provioning_pre_provisioning_hook_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
 
-        # Create Provisioning template WITH CUSTOM RESOURCE
-        iot_jitp_template = cfn.CfnCustomResource(
-            self,
-            "IotJitpTemplate",
-            service_token=iot_jitp_template_lambda.function_arn,
-        )
-        #iot_jitp_template.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
-        iot_jitp_template.add_override("Properties.TemplateName", "SaasIotJitpTemplate")
-        iot_jitp_template.add_override("Properties.ProvisioningRoleArn", iot_provioning_role.role_arn)
-        jitp_body = open("saas/body.json", "r").read()
-        iot_jitp_template.add_override("Properties.TemplateBody", jitp_body)
-        # iot_jitp_template.add_override("Properties.CaCertificate", ca_certificate)
+
+
+            # Create the template
+            iot_provioning_template = iot.CfnProvisioningTemplate(
+                self, "SaasIotProvisioningTemplate",
+                provisioning_role_arn = iot_provioning_role.role_arn,
+                template_body=template_body,
+                template_name="SaasIotProvisioningTemplate",
+                enabled=True,
+                pre_provisioning_hook=iot.CfnProvisioningTemplate.ProvisioningHookProperty(
+                    target_arn=iot_provioning_pre_provisioning_hook_lambda.function_arn
+                )
+                
+            )
+            iot_provioning_template.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+
+            # Permit the lambda to call the iot api
+            permission_hook_pre_provisionning = lambda_.CfnPermission(
+                self, "LambdaPermissionPreProvisioningHook",
+                action="lambda:InvokeFunction",
+                function_name=iot_provioning_pre_provisioning_hook_lambda.function_name,
+                principal="iot.amazonaws.com",
+            )
+            permission_hook_pre_provisionning.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+
+        enable_jitp = True
+        if enable_jitp:
+            # JITP
+            # Lambda iot_jitp_template
+            iot_jitp_template_lambda = lambda_.Function(
+                self,
+                "IotJitpTemplateLambda",
+                code=lambda_.Code.from_asset("saas/iot_jitp_template"),
+                handler="index.lambda_handler",
+                runtime=lambda_.Runtime.PYTHON_3_8,
+
+                # Add the policy to the role
+                role=lambda_role,
+            )
+            iot_jitp_template_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+            # Create Provisioning template WITH CUSTOM RESOURCE
+            iot_jitp_template = cfn.CfnCustomResource(
+                self,
+                "IotJitpTemplate",
+                service_token=iot_jitp_template_lambda.function_arn,
+            )
+            #iot_jitp_template.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+            iot_jitp_template.add_override("Properties.TemplateName", "SaasIotJitpTemplate")
+            iot_jitp_template.add_override("Properties.ProvisioningRoleArn", iot_provioning_role.role_arn)
+            jitp_body = open("saas/body.json", "r").read()
+            iot_jitp_template.add_override("Properties.TemplateBody", jitp_body)
+            # iot_jitp_template.add_override("Properties.CaCertificate", ca_certificate)
+
+
+            # Lambda for SaasIotJitpRuleCreate
+            iot_jitp_rule_create_lambda = lambda_.Function(
+                self,
+                "IotJitpRuleCreateLambda",
+                code=lambda_.Code.from_asset("saas/iot_jitp_rule_create_lambda"),
+                handler="index.lambda_handler",
+                runtime=lambda_.Runtime.PYTHON_3_8,
+
+                # Add the policy to the role
+                role=lambda_role,
+            )
+            iot_jitp_rule_create_lambda.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+
+            # Rule which trigger the lambda function SELECT * FROM '$aws/events/thing/+/created'
+            iot_jitp_rule = iot.CfnTopicRule(
+                self, "SaasIotJitpRuleCreate",
+                rule_name="SaasIotJitpRuleCreate",
+                topic_rule_payload=iot.CfnTopicRule.TopicRulePayloadProperty(
+                    actions=[
+                        iot.CfnTopicRule.ActionProperty(
+                            lambda_=iot.CfnTopicRule.LambdaActionProperty(
+                                function_arn=iot_jitp_rule_create_lambda.function_arn
+                            )
+                        )
+                    ],
+                    sql="SELECT * FROM '$aws/events/thing/+/created'"
+                )
+            )
+            iot_jitp_rule.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
+            # Permit the lambda to be called by the rule
+            permission_rule_create = lambda_.CfnPermission(
+                self, "LambdaPermissionRuleCreate",
+                action="lambda:InvokeFunction",
+                function_name=iot_jitp_rule_create_lambda.function_name,
+                principal="iot.amazonaws.com",
+            )
+            permission_rule_create.apply_removal_policy(cdk.RemovalPolicy.DESTROY)
+
 
 
 

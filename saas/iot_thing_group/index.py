@@ -37,11 +37,27 @@ def lambda_handler(event, context):
 
         if event["RequestType"] == "Delete":
             thing_group_name = event["ResourceProperties"]["ThingGroupName"]
-            iot_client.delete_thing_group(thingGroupName=thing_group_name)
+            # If the thing group is not found, it will throw an exception
+            thing_group_arn = iot_client.describe_thing_group(thingGroupName=thing_group_name)["thingGroupArn"]
 
-        response_data = {"Arn": thing_group_arn} if event["RequestType"] == "Create" else {}
-        send_response(event, context, "SUCCESS", response_data, thing_group_name)
+            if thing_group_arn:
+                # List all things in the thing group
+                things = iot_client.list_things_in_thing_group(thingGroupName=thing_group_name)["things"]
+
+                # Remove all things from the thing group
+                for thing in things:
+                    iot_client.remove_thing_from_thing_group(thingGroupName=thing_group_name, thingName=thing)
+            else:
+                print("Thing group not found")
+
+
+
 
     except Exception as e:
         print("Error: ", str(e))
         send_response(event, context, "FAILED", {}, "FAILED_RESOURCE")
+
+
+    response_data = {"Arn": thing_group_arn} if event["RequestType"] == "Create" else {}
+    print(response_data)
+    send_response(event, context, "SUCCESS", response_data, thing_group_name)
